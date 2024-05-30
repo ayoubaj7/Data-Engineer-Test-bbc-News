@@ -1,0 +1,115 @@
+version: '3.8'
+services:
+  postgres:
+    image: postgres:13
+    environment:
+      POSTGRES_USER: airflow
+      POSTGRES_PASSWORD: airflow
+      POSTGRES_DB: airflow
+    ports:
+      - "5432:5432"
+    networks:
+      - app-network
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+
+  webserver:
+    build: .
+    environment:
+      AIRFLOW__CORE__EXECUTOR: LocalExecutor
+      AIRFLOW__DATABASE__SQL_ALCHEMY_CONN: postgresql+psycopg2://airflow:airflow@postgres/airflow
+      AIRFLOW__CORE__LOAD_EXAMPLES: 'false'
+    volumes:
+      - ./dags:/opt/airflow/dags
+      - ./scrapy_project/output:/opt/airflow/scrapy_project/output
+    ports:
+      - "8080:8080"
+    depends_on:
+      - postgres
+    networks:
+      - app-network
+    command: ["airflow", "webserver"]
+
+  scheduler:
+    build: .
+    environment:
+      AIRFLOW__CORE__EXECUTOR: LocalExecutor
+      AIRFLOW__DATABASE__SQL_ALCHEMY_CONN: postgresql+psycopg2://airflow:airflow@postgres/airflow
+    volumes:
+      - ./dags:/opt/airflow/dags
+      - ./scrapy_project/output:/opt/airflow/scrapy_project/output
+    depends_on:
+      - postgres
+    networks:
+      - app-network
+    command: ["airflow", "scheduler"]
+
+  airflow-init:
+    build: .
+    environment:
+      AIRFLOW__CORE__EXECUTOR: LocalExecutor
+      AIRFLOW__DATABASE__SQL_ALCHEMY_CONN: postgresql+psycopg2://airflow:airflow@postgres/airflow
+    volumes:
+      - ./dags:/opt/airflow/dags
+      - ./scrapy_project/output:/opt/airflow/scrapy_project/output
+    entrypoint: ["airflow", "db", "init"]
+    depends_on:
+      - postgres
+
+  create-user:
+    build: .
+    environment:
+      AIRFLOW__CORE__EXECUTOR: LocalExecutor
+      AIRFLOW__DATABASE__SQL_ALCHEMY_CONN: postgresql+psycopg2://airflow:airflow@postgres/airflow
+    volumes:
+      - ./dags:/opt/airflow/dags
+      - ./scrapy_project/output:/opt/airflow/scrapy_project/output
+    entrypoint: ["airflow", "users", "create"]
+    command: ["--username", "admin", "--password", "admin", "--firstname", "Admin", "--lastname", "User", "--role", "Admin", "--email", "admin@example.com"]
+    depends_on:
+      - postgres
+
+  mongo:
+    image: mongo:4.4
+    container_name: mongo_container
+    ports:
+      - "27017:27017"
+    networks:
+      - app-network
+    volumes:
+      - mongo-data:/data/db
+
+  neo4j:
+    image: neo4j:4.1
+    container_name: neo4j_container
+    ports:
+      - "7687:7687"
+      - "7474:7474"
+    environment:
+      - NEO4J_AUTH=neo4j/password
+    networks:
+      - app-network
+    volumes:
+      - neo4j-data:/data
+
+  fastapi:
+    build:
+      context: ./fastapi
+    container_name: fastapi_container
+    ports:
+      - "8000:8000"
+    depends_on:
+      - mongo
+      - neo4j
+    networks:
+      - app-network
+
+networks:
+  app-network:
+    driver: bridge
+
+volumes:
+  postgres-data:
+  mongo-data:
+  neo4j-data:
+
